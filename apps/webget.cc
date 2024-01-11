@@ -1,6 +1,7 @@
 #include "socket.hh"
 
 #include <cstdlib>
+#include <format>
 #include <iostream>
 #include <span>
 #include <string>
@@ -10,7 +11,19 @@ using namespace std;
 void get_URL( const string& host, const string& path )
 {
   cerr << "Function called: get_URL(" << host << ", " << path << ")\n";
-  cerr << "Warning: get_URL() has not been implemented yet.\n";
+  // cerr << "Warning: get_URL() has not been implemented yet.\n";
+  TCPSocket socket;
+  Address address( "cs144.keithw.org", "http" );
+  socket.connect( address );
+  std::string request = std::format( "GET {} HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n\r\n", path, host );
+  socket.write( request );
+  string response, buffer;
+  while ( socket.eof() == false ) {
+    socket.read( buffer );
+    response += buffer;
+  }
+
+  cout << response;
 }
 
 int main( int argc, char* argv[] )
