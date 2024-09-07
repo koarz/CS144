@@ -61,7 +61,7 @@ void Reader::pop( uint64_t len )
     data_.clear();
   } else {
     poped_ += len;
-    data_ = data_.substr( len, data_.size() - len );
+    data_ = data_.substr( len );
   }
 }
 

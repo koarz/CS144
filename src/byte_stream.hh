@@ -11,6 +11,11 @@ class ByteStream
 {
 public:
   explicit ByteStream( uint64_t capacity );
+  ByteStream( const ByteStream& other ) = default;
+  ByteStream( ByteStream&& other ) noexcept = default;
+
+  ByteStream& operator=( const ByteStream& other ) = default;
+  ByteStream& operator=( ByteStream&& other ) = default;
 
   // Helper functions (provided) to access the ByteStream's Reader and Writer interfaces
   Reader& reader();

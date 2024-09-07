@@ -1,6 +1,8 @@
 #pragma once
 
 #include "byte_stream.hh"
+#include <cstdint>
+#include <map>
 
 class Reassembler
 {
@@ -41,5 +43,14 @@ public:
   const Writer& writer() const { return output_.writer(); }
 
 private:
+  void MoveBufferToOuput();
+
   ByteStream output_; // the Reassembler writes to this ByteStream
+
+  // The buffer stores the index and its corresponding data
+  // Each insert should check whether the first index of the buffer is the next insert index.
+  // Once the bytestream is full then the buffer should be emptied
+  std::multimap<uint64_t, std::string> buffer_ {};
+  uint64_t current_idx_ {};
+  uint64_t last_idx_ { 0xffffffffffffffff };
 };
