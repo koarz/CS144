@@ -44,17 +44,16 @@ uint64_t Reassembler::bytes_pending() const
     return 0;
   }
   uint64_t begin_idx { buffer_.begin()->first }, idx { begin_idx },
-    length { ( idx + buffer_.begin()->second.size() ) > ( current_idx_ + output_.writer().available_capacity() )
-               ? ( current_idx_ + output_.writer().available_capacity() - idx )
+    curidx_add_avacapacity { output_.writer().available_capacity() + current_idx_ },
+    length { ( idx + buffer_.begin()->second.size() ) > ( curidx_add_avacapacity )
+               ? ( curidx_add_avacapacity - idx )
                : buffer_.begin()->second.size() },
     res {};
   std::for_each( std::next( buffer_.begin() ), buffer_.end(), [&]( auto& it ) {
     if ( it.first > idx + length ) {
       res += length;
       idx = it.first;
-      length = ( res + length ) > ( current_idx_ + output_.writer().available_capacity() )
-                 ? ( current_idx_ + output_.writer().available_capacity() - idx )
-                 : it.second.size();
+      length = ( res + length ) > ( curidx_add_avacapacity ) ? ( curidx_add_avacapacity - idx ) : it.second.size();
     } else {
       if ( it.first + it.second.size() < idx + length ) {
         return;
@@ -69,27 +68,25 @@ void Reassembler::MoveBufferToOuput()
 {
   if ( buffer_.empty() )
     return;
-  uint64_t available_capacity { output_.writer().available_capacity() };
+  uint64_t available_capacity { output_.writer().available_capacity() }, buf_add_curidx { current_idx_ };
   // cerr << "Avaliable capacity: " << available_capacity << '\n';
   std::string buffer;
-  buffer.reserve( available_capacity + 1 );
+  buffer.reserve( available_capacity );
   auto it = buffer_.begin();
-  while ( it != buffer_.end() && it->first <= current_idx_ + buffer.size() && buffer.size() < available_capacity ) {
-    if ( it->first + it->second.size() < current_idx_ + buffer.size() ) {
-      buffer_.erase( it );
-      it = buffer_.begin();
+  while ( it != buffer_.end() && it->first <= buf_add_curidx ) {
+    if ( it->first + it->second.size() < buf_add_curidx ) {
+      buffer_.erase( it++ );
       continue;
     }
     // cerr << it->second.size() << "      " << available_capacity - buffer.size() << '\n';
-    uint64_t substr_start_idx { it->first < current_idx_ + buffer.size() ? current_idx_ + buffer.size() - it->first
-                                                                         : 0 };
+    uint64_t substr_start_idx { it->first < buf_add_curidx ? buf_add_curidx - it->first : 0 };
     buffer.replace( buffer.size(),
                     std::min( it->second.size(), available_capacity - buffer.size() ),
-                    it->second.substr( substr_start_idx,
-                                       std::min( it->second.size() - current_idx_ + it->first,
-                                                 available_capacity - buffer.size() ) ) );
-    buffer_.erase( it );
-    it = buffer_.begin();
+                    it->second,
+                    substr_start_idx,
+                    std::min( it->second.size() - current_idx_ + it->first, available_capacity - buffer.size() ) );
+    buffer_.erase( it++ );
+    buf_add_curidx = current_idx_ + buffer.size();
   }
   // cerr << "Move to output: " << buffer << '\n';
   current_idx_ += buffer.size();
