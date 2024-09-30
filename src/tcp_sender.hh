@@ -3,13 +3,26 @@
 #include "byte_stream.hh"
 #include "tcp_receiver_message.hh"
 #include "tcp_sender_message.hh"
+#include "wrapping_integers.hh"
 
+#include <algorithm>
 #include <cstdint>
 #include <functional>
 #include <list>
 #include <memory>
 #include <optional>
 #include <queue>
+#include <unordered_map>
+
+template<>
+struct std::hash<Wrap32>
+{
+  std::size_t operator()( const Wrap32& s ) const noexcept
+  {
+    auto* data = reinterpret_cast<const uint32_t*>( &s );
+    return std::hash<uint32_t> {}( *data );
+  }
+};
 
 class TCPSender
 {
@@ -44,8 +57,22 @@ public:
   const Reader& reader() const { return input_.reader(); }
 
 private:
+  void init_data_slice_and_push( const TransmitFunction& transmit );
+
   // Variables initialized in constructor
   ByteStream input_;
   Wrap32 isn_;
-  uint64_t initial_RTO_ms_;
+  const uint64_t initial_RTO_ms_;
+  uint64_t RTO_ms_ { initial_RTO_ms_ };
+  uint64_t ms_since_last_tick_ {};
+
+  uint64_t retransmissions_ {};
+  uint64_t number_in_flight_ {};
+  uint64_t next_seqno_ {};
+  bool first_receive_ {};
+  bool send_fin_ {};
+  bool is_zero_window {};
+  uint16_t window_size_ {};
+  std::unordered_map<Wrap32, TCPSenderMessage> data_slice_ {};
+  std::list<Wrap32> data_key_ {};
 };
