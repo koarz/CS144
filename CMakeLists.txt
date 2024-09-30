@@ -15,6 +15,8 @@ include(etc/cflags.cmake)
 include(etc/scanners.cmake)
 include(etc/tests.cmake)
 
+add_link_options("-pthread")
+
 include_directories("${PROJECT_SOURCE_DIR}/util")
 include_directories("${PROJECT_SOURCE_DIR}/src")
 
