@@ -25,11 +25,6 @@ void TCPReceiver::receive( TCPSenderMessage message )
 
 TCPReceiverMessage TCPReceiver::send() const
 {
-  /*
-   * std::optional<Wrap32> ackno {};
-   * uint16_t window_size {};
-   * bool RST {};
-   */
   return TCPReceiverMessage {
     have_zero_point_ ? zero_point_.wrap( 1 + ( have_fin_ && reassembler_.writer().is_closed() )
                                            + static_cast<uint32_t>( reassembler_.reader().bytes_buffered()
