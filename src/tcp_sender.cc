@@ -15,17 +15,41 @@ uint64_t TCPSender::consecutive_retransmissions() const
 
 void TCPSender::push( const TransmitFunction& transmit )
 {
-  if ( sequence_numbers_in_flight() == 0 && !first_receive_ ) {
-    data_slice_.emplace( isn_,
-                         TCPSenderMessage { isn_, true, "", input_.writer().is_closed(), input_.has_error() } );
-    data_key_.push_back( isn_ );
-    transmit( data_slice_[isn_] );
-    number_in_flight_ += data_slice_[isn_].sequence_length();
-    next_seqno_ += data_slice_[isn_].sequence_length();
-    return;
+  uint64_t pos { number_in_flight_ };
+  if ( send_syn_ && !first_receive_ ) {
+    pos--;
   }
-
-  init_data_slice_and_push( transmit );
+  while ( !send_fin_ ) {
+    auto data_size = std::min( { input_.reader().bytes_buffered() - pos,
+                                 TCPConfig::MAX_PAYLOAD_SIZE,
+                                 static_cast<uint64_t>( window_size_ ) } );
+    send_fin_ = !send_fin_ && input_.writer().is_closed()
+                && ( window_size_ > input_.reader().bytes_buffered() - number_in_flight_ )
+                && !( pos + data_size < input_.reader().bytes_buffered() );
+    if ( send_syn_ && data_size == 0 && !send_fin_ ) {
+      return;
+    }
+    if ( pos > input_.reader().bytes_buffered() ) {
+      return;
+    }
+    if ( window_size_ > 1 && data_size == window_size_ && !send_syn_ ) {
+      data_size--;
+    }
+    auto seqno = isn_ + next_seqno_;
+    auto mess = TCPSenderMessage { seqno,
+                                   !send_syn_,
+                                   std::string( input_.reader().peek().substr( pos, data_size ) ),
+                                   send_fin_,
+                                   input_.has_error() };
+    pos += mess.sequence_length();
+    next_seqno_ += mess.sequence_length();
+    number_in_flight_ += mess.sequence_length();
+    window_size_ -= mess.sequence_length();
+    transmit( mess );
+    data_key_.push_back( seqno );
+    data_slice_.emplace( std::move( seqno ), std::move( mess ) );
+    send_syn_ = true;
+  }
 }
 
 TCPSenderMessage TCPSender::make_empty_message() const
@@ -40,6 +64,9 @@ void TCPSender::receive( const TCPReceiverMessage& msg )
   }
   if ( !msg.ackno.has_value() || msg.ackno.value() < isn_ + input_.reader().bytes_popped() + 1
        || msg.ackno.value().unwrap( isn_, next_seqno_ ) > next_seqno_ ) {
+    if ( !send_syn_ ) {
+      window_size_ = msg.window_size;
+    }
     return;
   }
   if ( !first_receive_ ) {
@@ -74,42 +101,16 @@ void TCPSender::receive( const TCPReceiverMessage& msg )
 
 void TCPSender::tick( uint64_t ms_since_last_tick, const TransmitFunction& transmit )
 {
+  if ( data_key_.empty() ) {
+    return;
+  }
   ms_since_last_tick_ += ms_since_last_tick;
   if ( ms_since_last_tick_ >= RTO_ms_ && !data_key_.empty() ) {
     transmit( data_slice_[data_key_.front()] );
     retransmissions_++;
-    if ( window_size_ != 0 || !first_receive_ || !input_.writer().is_closed() || !is_zero_window ) {
+    if ( window_size_ != 0 || !send_syn_ || !input_.writer().is_closed() || !is_zero_window ) {
       RTO_ms_ <<= 1;
     }
     ms_since_last_tick_ = 0;
-  }
-}
-
-void TCPSender::init_data_slice_and_push( const TransmitFunction& transmit )
-{
-  uint64_t pos { number_in_flight_ };
-  while ( !send_fin_ ) {
-    auto data_size = std::min( { input_.reader().bytes_buffered() - pos,
-                                 TCPConfig::MAX_PAYLOAD_SIZE,
-                                 static_cast<uint64_t>( window_size_ ) } );
-    send_fin_ = !send_fin_ && input_.writer().is_closed()
-                && ( window_size_ > input_.reader().bytes_buffered() - number_in_flight_ )
-                && !( pos + data_size < input_.reader().bytes_buffered() );
-    if ( data_size == 0 && !send_fin_ ) {
-      return;
-    }
-    if ( pos > input_.reader().bytes_buffered() ) {
-      return;
-    }
-    auto seqno = isn_ + next_seqno_;
-    auto mess = TCPSenderMessage {
-      seqno, false, std::string( input_.reader().peek().substr( pos, data_size ) ), send_fin_, input_.has_error() };
-    pos += mess.sequence_length();
-    next_seqno_ += mess.sequence_length();
-    number_in_flight_ += mess.sequence_length();
-    window_size_ -= mess.sequence_length();
-    transmit( mess );
-    data_key_.push_back( seqno );
-    data_slice_.emplace( std::move( seqno ), std::move( mess ) );
   }
 }

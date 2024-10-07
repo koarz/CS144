@@ -57,8 +57,6 @@ public:
   const Reader& reader() const { return input_.reader(); }
 
 private:
-  void init_data_slice_and_push( const TransmitFunction& transmit );
-
   // Variables initialized in constructor
   ByteStream input_;
   Wrap32 isn_;
@@ -69,10 +67,11 @@ private:
   uint64_t retransmissions_ {};
   uint64_t number_in_flight_ {};
   uint64_t next_seqno_ {};
-  bool first_receive_ {};
+  bool send_syn_ {};
   bool send_fin_ {};
   bool is_zero_window {};
-  uint16_t window_size_ {};
+  bool first_receive_ {};
+  uint16_t window_size_ { 1 };
   std::unordered_map<Wrap32, TCPSenderMessage> data_slice_ {};
   std::list<Wrap32> data_key_ {};
 };
